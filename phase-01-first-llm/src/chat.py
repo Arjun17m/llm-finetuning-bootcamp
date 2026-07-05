@@ -18,7 +18,7 @@ model = AutoModelForCausalLM.from_pretrained(
 messages = [
     {
         "role": "user",
-        "content": "Write an original science fiction story about AI discovering an ancient civilization on Mars. Make it surprising."
+        "content": "Repeat the word 'Transformer' twenty times."
     }
 ]
 
@@ -32,19 +32,41 @@ print("=" * 80)
 print(text)
 print("=" * 80)
 
+import time
+start = time.time()
+
 inputs = tokenizer(text, return_tensors="pt").to(model.device)
+print("=" * 50)
+print("EOS Token      :", tokenizer.eos_token)
+print("EOS Token ID   :", tokenizer.eos_token_id)
+print("PAD Token      :", tokenizer.pad_token)
+print("PAD Token ID   :", tokenizer.pad_token_id)
+print("=" * 50)
 
-generation_config = model.generation_config.clone()
-
-generation_config.do_sample = True
-generation_config.temperature = 0.7
-generation_config.top_p = 0.5
 
 outputs = model.generate(
     **inputs,
-    generation_config=generation_config,
-    max_new_tokens=80,
+    do_sample=True,
+    temperature=0.7,
+    top_p=1.0,
+    top_k=100,
+    repetition_penalty=2.0,
+    max_new_tokens=150,
 )
-print("\n==========================")
-print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-print("==========================")
+generated_tokens = outputs[0][inputs["input_ids"].shape[1]:]
+
+print("\nGenerated Token IDs:")
+print(generated_tokens.tolist())
+
+print("\nDecoded (with special tokens):")
+print(tokenizer.decode(generated_tokens, skip_special_tokens=False))
+
+print("\nDecoded (without special tokens):")
+print(tokenizer.decode(generated_tokens, skip_special_tokens=True))
+
+end = time.time()
+
+print(f"Generation Time: {end - start:.2f} seconds")
+# print("\n==========================")
+# # print(response)
+# print("==========================")
