@@ -1,0 +1,7 @@
+outputs/
+checkpoints/
+*.log
+*.tmp
+*.pt
+*.bin
+*.safetensors

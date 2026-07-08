@@ -1,0 +1,4 @@
+{"messages":[{"role":"user","content":"What is Artificial Intelligence?"},{"role":"assistant","content":"Artificial Intelligence is the field of building machines that can perform tasks requiring human intelligence."}]}
+{"messages":[{"role":"user","content":"Translate English to French\n\nGood Morning"},{"role":"assistant","content":"Bonjour"}]}
+{"messages":[{"role":"user","content":"Summarize the sentence\n\nTransformers are deep learning models that use self-attention to process sequences."},{"role":"assistant","content":"Transformers use self-attention for sequence modeling."}]}
+{"messages":[{"role":"user","content":"Write a Python function\n\nAdd two numbers"},{"role":"assistant","content":"def add(a, b):\n    return a + b"}]}

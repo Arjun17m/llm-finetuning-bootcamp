@@ -1,0 +1,22 @@
+[
+    {
+        "instruction": "What is Artificial Intelligence?",
+        "input": "",
+        "output": "Artificial Intelligence is the field of building machines that can perform tasks requiring human intelligence."
+    },
+    {
+        "instruction": "Translate English to French",
+        "input": "Good Morning",
+        "output": "Bonjour"
+    },
+    {
+        "instruction": "Summarize the sentence",
+        "input": "Transformers are deep learning models that use self-attention to process sequences.",
+        "output": "Transformers use self-attention for sequence modeling."
+    },
+    {
+        "instruction": "Write a Python function",
+        "input": "Add two numbers",
+        "output": "def add(a, b):\n    return a + b"
+    }
+]
