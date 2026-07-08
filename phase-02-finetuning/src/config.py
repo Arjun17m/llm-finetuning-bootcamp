@@ -13,7 +13,8 @@ class Config:
     # Dataset
     # ------------------------------
 
-    DATASET_PATH = "phase-02-finetuning/data/instruction_dataset.json"
+    DATASET_PATH = "../data/raw/instruction_dataset.json"
+    PROCESSED_DATASET_PATH = "phase-02-finetuning/data/processed/train.json"
 
     # ------------------------------
     # LoRA
@@ -32,7 +33,7 @@ class Config:
     # Training
     # ------------------------------
 
-    OUTPUT_DIR = "phase-02-finetuning/checkpoints"
+    OUTPUT_DIR = "../checkpoints"
 
     BATCH_SIZE = 1
 
