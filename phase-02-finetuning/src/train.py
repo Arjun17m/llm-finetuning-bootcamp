@@ -6,9 +6,11 @@ File:
     train.py
 
 Purpose:
-    Loads the processed dataset and tokenizer.
+    Fine-tune a Llama model using LoRA.
 
-    This is the first step of the training pipeline.
+This file contains only the production training pipeline.
+
+Debugging and learning code lives in model_inspector.py
 ===============================================================================
 """
 
@@ -18,24 +20,36 @@ Purpose:
 from datasets import load_dataset
 
 # =============================================================================
-# Hugging Face Tokenizer
+# Hugging Face Transformers
 # =============================================================================
-from transformers import AutoTokenizer
+from transformers import (
+    AutoTokenizer,
+    AutoModelForCausalLM,
+)
+# =============================================================================
+# PEFT
+# =============================================================================
+from peft import (
+    LoraConfig,
+    get_peft_model,
+)
+# =============================================================================
+# PyTorch
+# =============================================================================
+import torch
 
 # =============================================================================
 # Project Configuration
 # =============================================================================
 from config import Config
 
+from trl import SFTConfig , SFTTrainer
+
 
 def load_processed_dataset():
     """
-    Load the processed dataset created by prepare_dataset.py.
+    Load the processed training dataset.
     """
-
-    print("=" * 80)
-    print("Loading Processed Dataset")
-    print("=" * 80)
 
     dataset = load_dataset(
         "json",
@@ -44,132 +58,112 @@ def load_processed_dataset():
 
     return dataset
 
-
 def load_tokenizer():
     """
-    Load the tokenizer that belongs to the model.
+    Load the tokenizer associated with the base model.
     """
-
-    print("\nLoading Tokenizer...")
-
+    
     tokenizer = AutoTokenizer.from_pretrained(
         Config.MODEL_NAME
     )
-
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
     return tokenizer
 
-def inspect_chat_template(dataset, tokenizer):
+def load_model():
     """
-    Inspect how the tokenizer converts a conversation
-    into the text that the model was originally trained on.
-    """
-
-    print("\n" + "=" * 80)
-    print("Inspecting Chat Template")
-    print("=" * 80)
-
-    # ------------------------------------------------------------
-    # Get the first conversation from the dataset.
-    # ------------------------------------------------------------
-    messages = dataset["train"][0]["messages"]
-
-    # ------------------------------------------------------------
-    # Convert the conversation into the prompt format expected
-    # by Llama.
-    #
-    # tokenize=False means:
-    # Return plain text instead of token IDs.
-    # ------------------------------------------------------------
-    prompt = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=False,
-    )
-
-    print(prompt)
-
-
-def inspect_tokenization(dataset, tokenizer):
-    """
-    Inspect how the tokenizer converts a conversation into tensors.
-
-    Input:
-        messages
-
-    Output:
-        input_ids
-        attention_mask
+    Load the pretrained Llama model.
     """
 
-    print("\n" + "=" * 80)
-    print("Inspecting Tokenization")
-    print("=" * 80)
-
-    # -----------------------------------------------------------------
-    # Get the first conversation from the processed dataset.
-    # -----------------------------------------------------------------
-    messages = dataset["train"][0]["messages"]
-
-    # -----------------------------------------------------------------
-    # Convert the conversation into the exact prompt format used by
-    # the model during instruction tuning.
-    # -----------------------------------------------------------------
-    prompt = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=False,
+    model = AutoModelForCausalLM.from_pretrained(
+        Config.MODEL_NAME,
+        dtype=torch.float16,
+        device_map="auto",
     )
 
-    print("\nFormatted Prompt\n")
-    print(prompt)
+    return model
 
-    # -----------------------------------------------------------------
-    # Convert the prompt into PyTorch tensors.
-    #
-    # return_tensors="pt"
-    # tells the tokenizer to return torch.Tensor instead of Python lists.
-    # -----------------------------------------------------------------
-    encoded = tokenizer(
-        prompt,
-        return_tensors="pt",
+def apply_lora(model):
+    """
+    Apply LoRA adapters to the pretrained model.
+    """
+
+    peft_config = LoraConfig(
+
+        # Rank of LoRA matrices
+        r=Config.LORA_R,
+
+        # Scaling factor
+        lora_alpha=Config.LORA_ALPHA,
+
+        # Dropout applied during training
+        lora_dropout=Config.LORA_DROPOUT,
+
+        # Modules where LoRA will be injected
+        target_modules=Config.TARGET_MODULES,
+
+        # Don't train bias parameters
+        bias="none",
+
+        # Decoder-only language model
+        task_type="CAUSAL_LM",
     )
 
-    print("\n" + "=" * 80)
-    print("INPUT IDS")
-    print("=" * 80)
-
-    print(encoded["input_ids"])
-
-    print("\nShape:", encoded["input_ids"].shape)
-
-    print("\n" + "=" * 80)
-    print("ATTENTION MASK")
-    print("=" * 80)
-
-    print(encoded["attention_mask"])
-
-    print("\nShape:", encoded["attention_mask"].shape)
-
-    print("\n" + "=" * 80)
-    print("NUMBER OF TOKENS")
-    print("=" * 80)
-
-    print(encoded["input_ids"].shape[1])
-
-    # -----------------------------------------------------------------
-    # Decode back to verify nothing changed during tokenization.
-    # -----------------------------------------------------------------
-    print("\n" + "=" * 80)
-    print("DECODED BACK")
-    print("=" * 80)
-
-    decoded = tokenizer.decode(
-        encoded["input_ids"][0],
-        skip_special_tokens=False,
-        clean_up_tokenization_spaces=False,
+    model = get_peft_model(
+        model,
+        peft_config,
     )
 
-    print(decoded)
+    return model
+
+def create_training_config():
+    """
+    Create the training configuration for supervised fine-tuning.
+    """
+
+    training_config = SFTConfig(
+
+        output_dir=Config.OUTPUT_DIR,
+
+        num_train_epochs=Config.NUM_EPOCHS,
+
+        per_device_train_batch_size=Config.BATCH_SIZE,
+
+        gradient_accumulation_steps=Config.GRADIENT_ACCUMULATION_STEPS,
+
+        learning_rate=Config.LEARNING_RATE,
+
+        logging_steps=Config.LOGGING_STEPS,
+
+        save_strategy="epoch",
+
+        report_to="none",
+    )
+
+    return training_config
+
+def create_trainer(
+    model,
+    tokenizer,
+    dataset,
+    training_config,
+):
+    """
+    Create the Supervised Fine-Tuning trainer.
+    """
+
+    trainer = SFTTrainer(
+
+        model=model,
+
+        processing_class=tokenizer,
+
+        train_dataset=dataset["train"],
+
+        args=training_config,
+    )
+
+    return trainer
 
 def main():
 
@@ -177,36 +171,32 @@ def main():
 
     tokenizer = load_tokenizer()
 
-    print("\nDataset Summary")
-    print(dataset)
+    model = load_model()
 
-    print("\nColumns")
-    print(dataset["train"].column_names)
+    model = apply_lora(model)
 
-    print("\nFirst Example")
-    print(dataset["train"][0])
+    model.print_trainable_parameters()
 
-    print("\nTokenizer")
+    training_config = create_training_config()
 
-    print(type(tokenizer))
-
-    print(tokenizer.__class__.__name__)
-
-    print("\nEOS Token")
-
-    print(tokenizer.eos_token)
-
-    print("\nPAD Token")
-
-    print(tokenizer.pad_token)
-    inspect_chat_template(
-                dataset,
-                tokenizer,
-        )
-
-    inspect_tokenization(
-    dataset,
+    trainer = create_trainer(
+    model,
     tokenizer,
-        )
+    dataset,
+    training_config,    )
+
+    print("\nStarting Training...\n")
+
+    trainer.train()
+
+    print("\nTraining Completed Successfully!")
+    print("\nSaving Final Adapter...\n")
+
+    trainer.save_model(
+        Config.OUTPUT_DIR / "final_adapter"
+    )
+
+    print("Final Adapter Saved Successfully!")
+
 if __name__ == "__main__":
     main()

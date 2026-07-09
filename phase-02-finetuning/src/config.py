@@ -97,10 +97,13 @@ class Config:
 
     LEARNING_RATE = 2e-4
 
-    NUM_EPOCHS = 3
+    NUM_EPOCHS = 20
 
     RANDOM_SEED = 42
 
+    GRADIENT_ACCUMULATION_STEPS = 4
+
+    LOGGING_STEPS = 1
     # =====================================================================
     # Logging
     # =====================================================================
